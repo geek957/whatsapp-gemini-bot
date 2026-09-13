@@ -4,10 +4,12 @@ Images posted to a WhatsApp group are sent to the Gemini API with a prompt, and 
 is posted back to the same group. Scheduled and executed entirely by GitHub Actions.
 
 ```
-WhatsApp group ──▶ Green API queue ──▶ GitHub Actions (*/5 min) ──▶ Gemini
-                                              │                      │
-                                              └───── reply in group ◀┘
+WhatsApp group ──▶ Green API queue ──▶ GitHub Actions (manual run) ──▶ Gemini
+                                              │                        │
+                                              └────── reply in group ◀─┘
 ```
+
+Runs are **triggered on demand**, not on a schedule — see below for why.
 
 - **No server to run.** Green API buffers incoming messages in a pull queue, so an
   ephemeral Actions runner can read them. No webhook endpoint, no persistent socket.
@@ -146,39 +148,38 @@ This cannot cause a reply loop. Green API reports a phone-sent message as
 the former is ever read. In the history sweep, where the two are indistinguishable, safety
 comes from the pipeline acting only on images while the bot only ever sends text.
 
-## Timing, and triggering a run yourself
+## Triggering a run
 
-The schedule is `7,37 * * * *` — twice an hour, deliberately off the hour. GitHub runs
-schedules on a best-effort queue and sheds the most load at `:00`/`:30`. A `*/5` schedule was
-throttled to **two runs in six hours** on this repository, so asking for less turned out to be
-more reliable than asking for more.
+There is deliberately **no `schedule`** on this workflow. GitHub's cron proved unusable here:
+a `*/5` schedule produced two runs in six hours, and `7,37` was no better. Scheduled runs are
+best-effort and get shed under load, so relying on them meant images sat unanswered for hours.
 
-Nothing is lost when a tick is skipped: the Green API queue holds messages until read, the
-history sweep backfills, and `WINDOW_MINUTES=1440` still admits day-old images.
-
-When you want an answer now, don't wait for cron:
+Trigger a run whichever way suits you:
 
 ```bash
-scripts/trigger.sh            # dispatch and wait, printing the run's counters
+scripts/trigger.sh            # dispatch, wait, print the run's counters
 scripts/trigger.sh --dry-run  # match messages without calling Gemini or replying
 scripts/trigger.sh --doctor   # connectivity checks only
 ```
 
-It reuses the credential git already stored, so there is nothing to configure. You can also
-press **Run workflow** in the Actions tab, or process locally without GitHub at all:
+Or press **Run workflow** on the Actions tab (also in the GitHub mobile app):
+`Actions → whatsapp-gemini → Run workflow`, with optional `dry_run` and `doctor` checkboxes.
+
+Or skip GitHub entirely and process locally, which is the fastest and most reliable path:
 
 ```bash
 set -a && . ./.env && set +a && python3 -m bot.cli run
 ```
 
-For replies in ~30–60s instead, deploy `relay/cloudflare-worker.js` (free tier): it turns a
-provider webhook into a `repository_dispatch`, which this workflow already listens for. A
-relay is needed because Actions cannot receive inbound HTTP. If you enable a webhook in
-Green API, set `READ_MODE=history` so the cron sweep still works — a configured webhook can
-stop the pull queue from filling.
+Nothing is lost between runs: the Green API queue holds messages until read, the history sweep
+backfills, and `WINDOW_MINUTES=1440` still admits day-old images. Dedupe state means running
+twice never double-replies.
 
-GitHub also disables cron on repositories with no commits for 60 days; `keepalive.yml`
-commits a timestamp weekly to prevent that.
+### If you want automatic replies
+
+Deploy `relay/cloudflare-worker.js` (free tier). A Green API webhook hits the worker, which
+fires `repository_dispatch` — a trigger this workflow still listens for — and the reply lands
+in 30–60s. That is event-driven and does not depend on GitHub's scheduler at all.
 
 ## Choosing a model
 
@@ -227,9 +228,8 @@ being sent silently.
 
 ## Cost
 
-- **Actions:** free on public repositories. On a private repo, `*/5` is ~8,600 runs/month
-  at roughly a minute each — that exceeds the 2,000-minute free allowance, so either make
-  the repo public or widen the cron.
+- **Actions:** free on public repositories. With no schedule, you only spend minutes on runs
+  you ask for, so a private repo is viable too.
 - **Gemini:** billed per request; images cost far more tokens than text. `command` mode is
   the cheapest because idle group chatter triggers nothing.
 - **Green API:** free tier limits apply per their pricing.
@@ -271,8 +271,7 @@ bot/
     greenapi.py        pull queue, history sweep, group sends
     meta.py            official Cloud API, 1:1 only, webhook-fed
 .github/workflows/
-  whatsapp-gemini.yml  cron + repository_dispatch + manual
-  keepalive.yml        weekly commit so cron stays enabled
+  whatsapp-gemini.yml  manual + repository_dispatch (no cron: see Triggering a run)
   ci.yml               tests on 3.11 and 3.12
 scripts/state_sync.sh  read/write state on the bot-state branch via git plumbing
 relay/                 optional webhook -> repository_dispatch worker

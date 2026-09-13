@@ -1,13 +1,6 @@
 name: whatsapp-gemini
 
 on:
-  schedule:
-    # Twice an hour, deliberately off the hour: GitHub runs schedules on a best-effort queue
-    # and drops the most work at :00 and :30 when everyone's cron lands. A */5 schedule was
-    # throttled to roughly two runs in six hours on this repository, so asking for less is
-    # more likely to be honoured. Nothing is lost when a tick is late -- the Green API queue
-    # holds messages, the history sweep backfills, and the 24h window still admits them.
-    - cron: "7,37 * * * *"
   # Fired by relay/cloudflare-worker.js when a matching message arrives, for fast replies.
   repository_dispatch:
     types: [whatsapp-message]
