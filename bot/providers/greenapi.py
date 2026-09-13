@@ -24,6 +24,13 @@ LOG = logging.getLogger(__name__)
 IMAGE_TYPES = frozenset({"imageMessage", "stickerMessage"})
 TEXT_TYPES = frozenset({"textMessage", "extendedTextMessage", "quotedMessage"})
 
+# `outgoingMessageReceived` is a message you sent from the phone; `outgoingAPIMessageReceived`
+# is one this bot sent through the API. The latter is never processed, which is what keeps the
+# bot from answering its own replies in a loop.
+INCOMING_HOOK = "incomingMessageReceived"
+OUTGOING_PHONE_HOOK = "outgoingMessageReceived"
+SELF_SENT_HOOK = "outgoingAPIMessageReceived"
+
 
 class GreenApiProvider(Provider):
     name = "greenapi"
@@ -76,7 +83,7 @@ class GreenApiProvider(Provider):
             if not payload:
                 break
             receipt = payload.get("receiptId")
-            message = _parse_notification(payload.get("body") or {})
+            message = _parse_notification(payload.get("body") or {}, self.cfg.include_outgoing)
             if message is not None:
                 found.append(message)
             if receipt is not None:
@@ -105,7 +112,7 @@ class GreenApiProvider(Provider):
                 LOG.error("getChatHistory(%s) failed: %s", chat_id, exc)
                 continue
             for row in rows or []:
-                message = _parse_history_row(row, chat_id)
+                message = _parse_history_row(row, chat_id, self.cfg.include_outgoing)
                 if message is not None:
                     found.append(message)
         return found
@@ -161,8 +168,10 @@ class GreenApiProvider(Provider):
         return self._call("GET", "getSettings") or {}
 
 
-def _parse_notification(body: dict) -> InboundMessage | None:
-    if body.get("typeWebhook") != "incomingMessageReceived":
+def _parse_notification(body: dict, include_outgoing: bool = False) -> InboundMessage | None:
+    hook = body.get("typeWebhook")
+    accepted = {INCOMING_HOOK} | ({OUTGOING_PHONE_HOOK} if include_outgoing else set())
+    if hook not in accepted:
         return None
     sender = body.get("senderData") or {}
     data = body.get("messageData") or {}
@@ -182,11 +191,17 @@ def _parse_notification(body: dict) -> InboundMessage | None:
     )
 
 
-def _parse_history_row(row: dict, chat_id: str) -> InboundMessage | None:
-    """History rows are flatter than notifications and include outgoing messages."""
+def _parse_history_row(row: dict, chat_id: str, include_outgoing: bool = False) -> InboundMessage | None:
+    """History rows are flatter than notifications and include outgoing messages.
+
+    History cannot distinguish a phone-sent message from one this bot sent through the API.
+    That is safe because the pipeline only ever acts on images and the bot only ever sends
+    text, so its own replies can never be picked up as work.
+    """
     if not isinstance(row, dict):
         return None
-    if (row.get("type") or "incoming") != "incoming":
+    direction = row.get("type") or "incoming"
+    if direction != "incoming" and not (include_outgoing and direction == "outgoing"):
         return None
     message_id = row.get("idMessage") or ""
     if not message_id:

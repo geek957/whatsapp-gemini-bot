@@ -170,6 +170,76 @@ class GreenApiWriteTests(unittest.TestCase):
         self.assertIn("/waInstance1101/sendMessage/secret", http.calls[0]["url"])
 
 
+def outgoing_notification(hook: str, message_id: str = "OUT1") -> dict:
+    return {
+        "receiptId": 11,
+        "body": {
+            "typeWebhook": hook,
+            "idMessage": message_id,
+            "timestamp": 1_700_000_500,
+            "senderData": {"chatId": "120363411021022965@g.us", "chatName": "Summary_automation"},
+            "messageData": {
+                "typeMessage": "imageMessage",
+                "fileMessageData": {"downloadUrl": "https://m/self.jpg", "caption": "", "mimeType": "image/jpeg"},
+            },
+        },
+    }
+
+
+class OutgoingMessageTests(unittest.TestCase):
+    """Covers the case where the linked number is also the person posting the images."""
+
+    def test_phone_sent_images_ignored_by_default(self):
+        http = FakeHttp([json_response(outgoing_notification("outgoingMessageReceived")),
+                         json_response({}), null_response()])
+        cfg = make_config(include_outgoing=False)
+        self.assertEqual(GreenApiProvider(cfg, http=http).fetch_messages(), [])
+
+    def test_phone_sent_images_read_when_enabled(self):
+        http = FakeHttp([json_response(outgoing_notification("outgoingMessageReceived")),
+                         json_response({}), null_response()])
+        cfg = make_config(include_outgoing=True, chat_ids=("120363411021022965@g.us",))
+        messages = GreenApiProvider(cfg, http=http).fetch_messages()
+        self.assertEqual([m.id for m in messages], ["OUT1"])
+        self.assertEqual(messages[0].kind, "image")
+
+    def test_bot_own_api_sends_never_read_even_when_enabled(self):
+        """The loop guard: outgoingAPIMessageReceived is this bot's own reply."""
+        http = FakeHttp([json_response(outgoing_notification("outgoingAPIMessageReceived")),
+                         json_response({}), null_response()])
+        cfg = make_config(include_outgoing=True)
+        self.assertEqual(GreenApiProvider(cfg, http=http).fetch_messages(), [])
+
+    def test_history_outgoing_rows_ignored_by_default(self):
+        rows = [{
+            "type": "outgoing", "idMessage": "H-OUT", "typeMessage": "imageMessage",
+            "timestamp": 1_700_000_600, "downloadUrl": "u", "mimeType": "image/jpeg",
+            "chatId": "123-456@g.us",
+        }]
+        http = FakeHttp([json_response(rows)])
+        cfg = make_config(read_mode="history", include_outgoing=False)
+        self.assertEqual(GreenApiProvider(cfg, http=http).fetch_messages(), [])
+
+    def test_history_outgoing_rows_read_when_enabled(self):
+        rows = [
+            {
+                "type": "outgoing", "idMessage": "H-OUT", "typeMessage": "imageMessage",
+                "timestamp": 1_700_000_600, "downloadUrl": "u", "mimeType": "image/jpeg",
+                "chatId": "123-456@g.us",
+            },
+            {  # the bot's own text reply must never become work
+                "type": "outgoing", "idMessage": "H-REPLY", "typeMessage": "textMessage",
+                "timestamp": 1_700_000_700, "textMessage": "Total is 42.50", "chatId": "123-456@g.us",
+            },
+        ]
+        http = FakeHttp([json_response(rows)])
+        cfg = make_config(read_mode="history", include_outgoing=True)
+        messages = GreenApiProvider(cfg, http=http).fetch_messages()
+        kinds = {m.id: m.kind for m in messages}
+        self.assertEqual(kinds["H-OUT"], "image")
+        self.assertEqual(kinds["H-REPLY"], "text", "text is read but the pipeline never acts on it")
+
+
 class GreenApiChatListTests(unittest.TestCase):
     def test_list_chats_classifies_groups_and_direct_chats(self):
         payload = [

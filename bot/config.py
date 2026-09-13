@@ -71,6 +71,9 @@ class Config:
     trigger_mode: str = "command_or_caption"
     command_prefix: str = "/ask"
     read_mode: str = "both"
+    # Process images you post yourself from the linked phone. Required when the bot number
+    # and the person posting are the same account, as in a personal automation group.
+    include_outgoing: bool = False
     history_count: int = 40
     window_minutes: int = 60
     max_images_per_reply: int = 6
@@ -158,6 +161,7 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         trigger_mode=trigger_mode,
         command_prefix=command_prefix,
         read_mode=read_mode,
+        include_outgoing=get("INCLUDE_OUTGOING", "false").lower() in {"1", "true", "yes", "on"},
         history_count=_int("HISTORY_COUNT", get("HISTORY_COUNT", "40"), errors, 1),
         window_minutes=_int("WINDOW_MINUTES", get("WINDOW_MINUTES", "60"), errors, 1),
         max_images_per_reply=_int("MAX_IMAGES_PER_REPLY", get("MAX_IMAGES_PER_REPLY", "6"), errors, 1),

@@ -91,6 +91,7 @@ Settings → Secrets and variables → Actions.
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
 | `GEMINI_MODEL` | (`gemini-2.5-flash`) |
 | `READ_MODE` | `queue` / `history` / `both` (`both`) |
+| `INCLUDE_OUTGOING` | `true` to process images you post yourself from the linked phone (`false`) |
 | `WINDOW_MINUTES` | Ignore images older than this (`60`) |
 | `MAX_IMAGES_PER_REPLY` | Images batched into one Gemini call (`6`) |
 | `MAX_REPLIES_PER_RUN` | Cap on replies per run (`5`) |
@@ -120,6 +121,20 @@ exactly that. Multiple images in the same chat are answered in **one** Gemini ca
 
 Edit `prompts/default.md` to change the bot's behaviour and tone. No code change needed.
 
+## Posting the images yourself
+
+If the number linked to Green API is also the account that posts the images — a personal
+automation group, for instance — those messages are **outgoing**, not incoming, and are
+ignored by default. To handle that case:
+
+1. In Green API, turn on **"Receive webhooks on messages sent from phone"**.
+2. Set `INCLUDE_OUTGOING=true`.
+
+This cannot cause a reply loop. Green API reports a phone-sent message as
+`outgoingMessageReceived` and this bot's own replies as `outgoingAPIMessageReceived`; only
+the former is ever read. In the history sweep, where the two are indistinguishable, safety
+comes from the pipeline acting only on images while the bot only ever sends text.
+
 ## Timing, and what "every 5 minutes" really means
 
 5 minutes is GitHub's cron minimum, but scheduled runs sit in a best-effort queue and
@@ -147,7 +162,7 @@ commits a timestamp weekly to prevent that.
 ## Local development
 
 ```bash
-python3 -m unittest discover -s tests -v     # 99 tests, no network
+python3 -m unittest discover -s tests -v     # 104 tests, no network
 python3 -m bot.cli doctor                    # credential and connectivity check
 python3 -m bot.cli list-chats --groups-only  # find a group id without waiting for a message
 python3 -m bot.cli run --dry-run             # read and match, call nothing
