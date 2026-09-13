@@ -57,15 +57,18 @@ GEMINI_API_KEY=... python3 -m bot.cli list-models
 
 ### 3. Find the group id
 
-With the credentials exported locally, post an image in the target group and run:
+With the credentials exported locally, list the groups the account belongs to:
 
 ```bash
-python3 -m bot.cli doctor
+python3 -m bot.cli list-chats --groups-only
+python3 -m bot.cli list-chats --filter automation
 ```
 
-It prints every chat it saw, marking groups. Copy the `...@g.us` id.
+Copy the `...@g.us` id of the target group. Prefer a group you created for this — the bot
+replies to real people otherwise.
 
-> `doctor` consumes the queue in `queue`/`both` read mode, exactly as a real run does.
+`doctor` also prints chat ids, but only for chats with messages waiting in the queue, and it
+consumes that queue in `queue`/`both` read mode exactly as a real run does.
 
 ### 4. Configure the repository
 
@@ -144,8 +147,9 @@ commits a timestamp weekly to prevent that.
 ## Local development
 
 ```bash
-python3 -m unittest discover -s tests -v     # 97 tests, no network
+python3 -m unittest discover -s tests -v     # 99 tests, no network
 python3 -m bot.cli doctor                    # credential and connectivity check
+python3 -m bot.cli list-chats --groups-only  # find a group id without waiting for a message
 python3 -m bot.cli run --dry-run             # read and match, call nothing
 python3 -m bot.cli run                       # full cycle
 python3 -m bot.cli list-models               # models available to your key
@@ -171,7 +175,7 @@ bot/
   gemini.py            generateContent with inline base64 images
   state.py             dedupe records, atomic writes, pruning, union merge
   pipeline.py          read -> select -> batch -> Gemini -> reply -> record
-  cli.py               run / doctor / list-models / state-merge
+  cli.py               run / doctor / list-chats / list-models / state-merge
   providers/
     base.py            InboundMessage + Provider interface
     greenapi.py        pull queue, history sweep, group sends

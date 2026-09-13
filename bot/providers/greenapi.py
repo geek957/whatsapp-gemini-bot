@@ -140,6 +140,23 @@ class GreenApiProvider(Provider):
         """Instance authorisation state: `authorized` means the number is linked."""
         return self._call("GET", "getStateInstance") or {}
 
+    def list_chats(self) -> list[dict]:
+        """Every known chat, so a group id can be found without waiting for a message."""
+        rows = self._call("GET", "getContacts") or []
+        chats = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            chat_id = row.get("id") or ""
+            if not chat_id:
+                continue
+            chats.append({
+                "id": chat_id,
+                "name": row.get("name") or row.get("contactName") or row.get("pushname") or "",
+                "kind": "group" if chat_id.endswith("@g.us") else "direct",
+            })
+        return chats
+
     def settings(self) -> dict:
         return self._call("GET", "getSettings") or {}
 

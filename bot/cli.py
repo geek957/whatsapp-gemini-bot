@@ -138,6 +138,29 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_list_chats(args: argparse.Namespace) -> int:
+    """List chats so a group id can be copied into WHATSAPP_CHAT_IDS."""
+    cfg = _load_config()
+    provider = build_provider(cfg)
+    if not isinstance(provider, GreenApiProvider):
+        print(f"list-chats is only supported for PROVIDER=greenapi, not {cfg.provider}", file=sys.stderr)
+        return 2
+
+    chats = provider.list_chats()
+    needle = (args.filter or "").lower()
+    if args.groups_only:
+        chats = [chat for chat in chats if chat["kind"] == "group"]
+    if needle:
+        chats = [chat for chat in chats if needle in chat["name"].lower() or needle in chat["id"].lower()]
+
+    if not chats:
+        print("no matching chats found", file=sys.stderr)
+        return 1
+    for chat in sorted(chats, key=lambda c: (c["kind"], c["name"].lower())):
+        print(f"{chat['id']:36} {chat['kind']:7} {chat['name']}")
+    return 0
+
+
 def cmd_list_models(args: argparse.Namespace) -> int:
     cfg = _load_config()
     names = list_models(cfg)
@@ -175,6 +198,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subs.add_parser("doctor", help="check credentials and list chat ids")
     doctor.add_argument("--raw", action="store_true", help="dump the newest raw provider payload")
     doctor.set_defaults(func=cmd_doctor)
+
+    chats = subs.add_parser("list-chats", help="list WhatsApp chats and their ids")
+    chats.add_argument("--filter", help="only show chats whose name or id contains this text")
+    chats.add_argument("--groups-only", action="store_true", help="hide direct chats")
+    chats.set_defaults(func=cmd_list_chats)
 
     models = subs.add_parser("list-models", help="list Gemini models available to the key")
     models.set_defaults(func=cmd_list_models)

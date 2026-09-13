@@ -170,6 +170,30 @@ class GreenApiWriteTests(unittest.TestCase):
         self.assertIn("/waInstance1101/sendMessage/secret", http.calls[0]["url"])
 
 
+class GreenApiChatListTests(unittest.TestCase):
+    def test_list_chats_classifies_groups_and_direct_chats(self):
+        payload = [
+            {"id": "120363411021022965@g.us", "name": "Summary_automation"},
+            {"id": "919700548274@c.us", "contactName": "Neighbour"},
+            {"id": "", "name": "broken row"},
+            "not a dict",
+        ]
+        http = FakeHttp([json_response(payload)])
+        chats = GreenApiProvider(make_config(), http=http).list_chats()
+
+        self.assertEqual(len(chats), 2)
+        self.assertEqual(chats[0], {
+            "id": "120363411021022965@g.us", "name": "Summary_automation", "kind": "group",
+        })
+        self.assertEqual(chats[1]["kind"], "direct")
+        self.assertEqual(chats[1]["name"], "Neighbour")
+        self.assertIn("getContacts", http.calls[0]["url"])
+
+    def test_list_chats_tolerates_an_empty_response(self):
+        http = FakeHttp([json_response([])])
+        self.assertEqual(GreenApiProvider(make_config(), http=http).list_chats(), [])
+
+
 class GreenApiDownloadTests(unittest.TestCase):
     def test_download_uses_url_from_the_message(self):
         seen = {}
