@@ -59,24 +59,48 @@ if [ "$login" != "$owner" ]; then
   owner="$login"
 fi
 
-echo "==> creating ${owner}/${repo_name} (${visibility})"
-private=false
-[ "$visibility" = "private" ] && private=true
-status="$(api -X POST https://api.github.com/user/repos \
-  -d "{\"name\":\"${repo_name}\",\"private\":${private},\"description\":\"WhatsApp group images to Gemini and back, scheduled by GitHub Actions\",\"has_issues\":true,\"has_wiki\":false}")"
+echo "==> checking whether ${owner}/${repo_name} exists"
+status="$(api "https://api.github.com/repos/${owner}/${repo_name}")"
+if [ "$status" = "200" ]; then
+  echo "    exists, pushing to it"
+else
+  echo "==> creating ${owner}/${repo_name} (${visibility})"
+  private=false
+  [ "$visibility" = "private" ] && private=true
+  status="$(api -X POST https://api.github.com/user/repos \
+    -d "{\"name\":\"${repo_name}\",\"private\":${private},\"description\":\"WhatsApp group images to Gemini and back, scheduled by GitHub Actions\",\"has_issues\":true,\"has_wiki\":false}")"
 
-case "$status" in
-201) echo "    created" ;;
-422)
-  echo "    already exists, reusing it"
-  ;;
-*)
-  echo "create failed (HTTP $status):" >&2
-  head -c 400 /tmp/gh_setup_body.$$ >&2
-  rm -f /tmp/gh_setup_body.$$
-  exit 1
-  ;;
-esac
+  case "$status" in
+  201) echo "    created" ;;
+  422) echo "    already exists, reusing it" ;;
+  403)
+    cat >&2 <<'MSG'
+
+Cannot create the repository with this token.
+
+Fine-grained tokens cannot call POST /user/repos, which is what "Resource not accessible
+by personal access token" means here. Two ways forward:
+
+  a) Create the empty repository in the browser, then re-run this script. It will detect
+     the repository and just push. Do NOT add a README, .gitignore or licence:
+       https://github.com/new     (name it exactly as passed to this script)
+
+  b) Use a classic token with the `repo` scope instead:
+       https://github.com/settings/tokens/new?scopes=repo
+
+Your current token is fine for pushing once the repository exists.
+MSG
+    rm -f /tmp/gh_setup_body.$$
+    exit 1
+    ;;
+  *)
+    echo "create failed (HTTP $status):" >&2
+    head -c 400 /tmp/gh_setup_body.$$ >&2
+    rm -f /tmp/gh_setup_body.$$
+    exit 1
+    ;;
+  esac
+fi
 rm -f /tmp/gh_setup_body.$$
 
 echo "==> storing credential for this repository only"
