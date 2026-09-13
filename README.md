@@ -175,11 +175,33 @@ Nothing is lost between runs: the Green API queue holds messages until read, the
 backfills, and `WINDOW_MINUTES=1440` still admits day-old images. Dedupe state means running
 twice never double-replies.
 
-### If you want automatic replies
+### Letting someone else trigger it
 
-Deploy `relay/cloudflare-worker.js` (free tier). A Green API webhook hits the worker, which
-fires `repository_dispatch` — a trigger this workflow still listens for — and the reply lands
-in 30–60s. That is event-driven and does not depend on GitHub's scheduler at all.
+`relay/cloudflare-worker.js` is a single Cloudflare Worker (free tier) serving a one-button
+page. The GitHub token lives in it as a secret, so whoever you share the link with needs **no
+GitHub account, no token and no repository access** — only the URL and a passcode.
+
+```bash
+npx wrangler deploy relay/cloudflare-worker.js --name whatsapp-gemini
+npx wrangler secret put GITHUB_TOKEN    # fine-grained PAT, Actions: read+write, this repo only
+npx wrangler secret put GITHUB_REPO     # geek957/whatsapp-gemini-bot
+npx wrangler secret put RUN_PASSCODE    # share this with them
+```
+
+Then share `https://whatsapp-gemini.<your-subdomain>.workers.dev`. The page has **Run now**,
+**Test only** (dry run) and **Check connection** (doctor), and polls the result so they can see
+it finish without ever opening GitHub.
+
+Anyone with the URL and passcode can start runs, which spend Gemini quota. Rotate with
+`wrangler secret put RUN_PASSCODE`.
+
+### If you want fully automatic replies
+
+The same Worker exposes `POST /webhook`. Set that as the Green API webhook URL (with
+`?token=<RELAY_SECRET>`) and it fires `repository_dispatch`, which this workflow still listens
+for — replies in 30–60s with no scheduler involved. If you enable a Green API webhook, set
+`READ_MODE=history` so the sweep still backfills, since a configured webhook can stop the pull
+queue from filling.
 
 ## Choosing a model
 
@@ -274,7 +296,7 @@ bot/
   whatsapp-gemini.yml  manual + repository_dispatch (no cron: see Triggering a run)
   ci.yml               tests on 3.11 and 3.12
 scripts/state_sync.sh  read/write state on the bot-state branch via git plumbing
-relay/                 optional webhook -> repository_dispatch worker
+relay/                 Cloudflare Worker: shareable trigger page + webhook relay
 prompts/default.md     the prompt sent with every image
 ```
 
