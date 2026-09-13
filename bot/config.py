@@ -65,7 +65,11 @@ class Config:
     gemini_model: str = "gemini-2.5-flash"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_temperature: float = 0.4
-    gemini_max_output_tokens: int = 1024
+    gemini_max_output_tokens: int = 4096
+    # Gemini 2.5+ are thinking models and charge reasoning tokens against
+    # maxOutputTokens, which silently truncates the visible answer. 0 disables thinking
+    # (flash only), -1 lets the model decide, a positive value caps it.
+    gemini_thinking_budget: int = 0
 
     prompt_path: Path = Path("prompts/default.md")
     trigger_mode: str = "command_or_caption"
@@ -156,7 +160,8 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         gemini_model=get("GEMINI_MODEL", "gemini-2.5-flash"),
         gemini_api_base=get("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
         gemini_temperature=_float("GEMINI_TEMPERATURE", get("GEMINI_TEMPERATURE", "0.4"), errors),
-        gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "1024"), errors, 1),
+        gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "4096"), errors, 1),
+        gemini_thinking_budget=_int("GEMINI_THINKING_BUDGET", get("GEMINI_THINKING_BUDGET", "0"), errors, -1),
         prompt_path=prompt_path,
         trigger_mode=trigger_mode,
         command_prefix=command_prefix,

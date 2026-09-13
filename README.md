@@ -90,6 +90,8 @@ Settings → Secrets and variables → Actions.
 | `TRIGGER_MODE` | `any_image` / `command` / `command_or_caption` (`command_or_caption`) |
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
 | `GEMINI_MODEL` | (`gemini-2.5-flash`) |
+| `GEMINI_THINKING_BUDGET` | `0` off, `-1` model decides, or a token cap (`0`) |
+| `GEMINI_MAX_OUTPUT_TOKENS` | (`4096`) |
 | `READ_MODE` | `queue` / `history` / `both` (`both`) |
 | `INCLUDE_OUTGOING` | `true` to process images you post yourself from the linked phone (`false`) |
 | `WINDOW_MINUTES` | Ignore images older than this (`60`) |
@@ -150,6 +152,18 @@ stop the pull queue from filling.
 GitHub also disables cron on repositories with no commits for 60 days; `keepalive.yml`
 commits a timestamp weekly to prevent that.
 
+## Thinking tokens will truncate your replies
+
+Gemini 2.5-class models are *thinking* models, and reasoning tokens are charged against
+`maxOutputTokens`. With the API default budget, a request can spend ~980 of 1024 tokens
+thinking and emit a reply that stops mid-word, reported as `finishReason: MAX_TOKENS`.
+
+This bot therefore sends `thinkingConfig.thinkingBudget: 0` by default and allows 4096
+output tokens. If you switch to a model that cannot disable thinking (`gemini-2.5-pro`), set
+`GEMINI_THINKING_BUDGET=-1` and raise `GEMINI_MAX_OUTPUT_TOKENS` well above the answer you
+want. A truncated response is logged as a warning and flagged on the result rather than
+being sent silently.
+
 ## Cost
 
 - **Actions:** free on public repositories. On a private repo, `*/5` is ~8,600 runs/month
@@ -162,7 +176,7 @@ commits a timestamp weekly to prevent that.
 ## Local development
 
 ```bash
-python3 -m unittest discover -s tests -v     # 104 tests, no network
+python3 -m unittest discover -s tests -v     # 111 tests, no network
 python3 -m bot.cli doctor                    # credential and connectivity check
 python3 -m bot.cli list-chats --groups-only  # find a group id without waiting for a message
 python3 -m bot.cli run --dry-run             # read and match, call nothing

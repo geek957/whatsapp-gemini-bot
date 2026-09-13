@@ -19,6 +19,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.gemini_model, "gemini-2.5-flash")
         self.assertEqual(cfg.trigger_mode, "command_or_caption")
         self.assertEqual(cfg.read_mode, "both")
+        self.assertEqual(cfg.gemini_max_output_tokens, 4096)
+        self.assertEqual(cfg.gemini_thinking_budget, 0, "thinking must be off or replies truncate")
         self.assertFalse(cfg.dry_run)
 
     def test_missing_credentials_are_all_reported(self):
@@ -47,6 +49,16 @@ class ConfigTests(unittest.TestCase):
         env = dict(BASE_ENV, WHATSAPP_CHAT_IDS=" a@g.us, b@g.us\nc@c.us ,")
         cfg = config_module.from_env(env)
         self.assertEqual(cfg.chat_ids, ("a@g.us", "b@g.us", "c@c.us"))
+
+    def test_thinking_budget_accepts_minus_one_for_dynamic(self):
+        cfg = config_module.from_env(dict(BASE_ENV, GEMINI_THINKING_BUDGET="-1"))
+        cfg.raise_for_errors()
+        self.assertEqual(cfg.gemini_thinking_budget, -1)
+
+    def test_thinking_budget_rejects_below_minus_one(self):
+        cfg = config_module.from_env(dict(BASE_ENV, GEMINI_THINKING_BUDGET="-5"))
+        with self.assertRaises(ConfigError):
+            cfg.raise_for_errors()
 
     def test_invalid_enum_is_rejected(self):
         cfg = config_module.from_env(dict(BASE_ENV, TRIGGER_MODE="whenever"))

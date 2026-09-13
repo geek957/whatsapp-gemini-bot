@@ -42,6 +42,8 @@ class GeminiResult:
     finish_reason: str = ""
     prompt_tokens: int = 0
     output_tokens: int = 0
+    thinking_tokens: int = 0
+    truncated: bool = False
 
 
 def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -> GeminiResult:
@@ -64,12 +66,17 @@ def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -
             }
         })
 
+    generation_config: dict = {
+        "temperature": cfg.gemini_temperature,
+        "maxOutputTokens": cfg.gemini_max_output_tokens,
+    }
+    # Without this, a 2.5-class model spends most of maxOutputTokens on reasoning and the
+    # reply arrives truncated mid-sentence. -1 means "let the model decide".
+    if cfg.gemini_thinking_budget >= 0:
+        generation_config["thinkingConfig"] = {"thinkingBudget": cfg.gemini_thinking_budget}
     body = {
         "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "temperature": cfg.gemini_temperature,
-            "maxOutputTokens": cfg.gemini_max_output_tokens,
-        },
+        "generationConfig": generation_config,
     }
     url = f"{cfg.gemini_api_base}/models/{cfg.gemini_model}:generateContent"
     try:
@@ -104,12 +111,22 @@ def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -
         raise GeminiError(f"Gemini returned empty text (finishReason={finish or 'unknown'})")
 
     usage = payload.get("usageMetadata") or {}
+    thoughts = int(usage.get("thoughtsTokenCount") or 0)
+    if finish == "MAX_TOKENS":
+        # Text was produced but cut off. Surfacing this beats silently sending half a reply.
+        LOG.warning(
+            "response truncated: finishReason=MAX_TOKENS, %d reasoning tokens of a %d budget; "
+            "raise GEMINI_MAX_OUTPUT_TOKENS or lower GEMINI_THINKING_BUDGET",
+            thoughts, cfg.gemini_max_output_tokens,
+        )
     return GeminiResult(
         text=text,
         model=cfg.gemini_model,
         finish_reason=finish,
         prompt_tokens=int(usage.get("promptTokenCount") or 0),
         output_tokens=int(usage.get("candidatesTokenCount") or 0),
+        thinking_tokens=thoughts,
+        truncated=finish == "MAX_TOKENS",
     )
 
 

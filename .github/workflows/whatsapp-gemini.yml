@@ -43,6 +43,8 @@ jobs:
       META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      GEMINI_MAX_OUTPUT_TOKENS: ${{ vars.GEMINI_MAX_OUTPUT_TOKENS || '4096' }}
+      GEMINI_THINKING_BUDGET: ${{ vars.GEMINI_THINKING_BUDGET || '0' }}
       WHATSAPP_CHAT_IDS: ${{ vars.WHATSAPP_CHAT_IDS }}
       TRIGGER_MODE: ${{ vars.TRIGGER_MODE || 'command_or_caption' }}
       COMMAND_PREFIX: ${{ vars.COMMAND_PREFIX || '/ask' }}

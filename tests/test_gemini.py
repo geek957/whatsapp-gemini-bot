@@ -101,6 +101,43 @@ class AnalyzeTests(unittest.TestCase):
         self.assertEqual(result.text, "ab")
 
 
+class ThinkingBudgetTests(unittest.TestCase):
+    """A 2.5-class model spends maxOutputTokens on reasoning unless told not to."""
+
+    def test_thinking_disabled_by_default(self):
+        http = FakeHttp([json_response(OK_PAYLOAD)])
+        analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
+        cfg_sent = http.calls[0]["json"]["generationConfig"]
+        self.assertEqual(cfg_sent["thinkingConfig"], {"thinkingBudget": 0})
+        self.assertEqual(cfg_sent["maxOutputTokens"], 4096)
+
+    def test_positive_budget_passed_through(self):
+        http = FakeHttp([json_response(OK_PAYLOAD)])
+        analyze(make_config(gemini_thinking_budget=512), "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertEqual(http.calls[0]["json"]["generationConfig"]["thinkingConfig"], {"thinkingBudget": 512})
+
+    def test_negative_budget_omits_config_so_the_model_decides(self):
+        http = FakeHttp([json_response(OK_PAYLOAD)])
+        analyze(make_config(gemini_thinking_budget=-1), "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertNotIn("thinkingConfig", http.calls[0]["json"]["generationConfig"])
+
+    def test_truncated_response_is_flagged_not_silently_sent(self):
+        payload = {
+            "candidates": [{"content": {"parts": [{"text": "half an ans"}]}, "finishReason": "MAX_TOKENS"}],
+            "usageMetadata": {"promptTokenCount": 272, "candidatesTokenCount": 41, "thoughtsTokenCount": 980},
+        }
+        http = FakeHttp([json_response(payload)])
+        result = analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertTrue(result.truncated)
+        self.assertEqual(result.thinking_tokens, 980)
+        self.assertEqual(result.text, "half an ans")
+
+    def test_complete_response_is_not_flagged(self):
+        http = FakeHttp([json_response(OK_PAYLOAD)])
+        result = analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertFalse(result.truncated)
+
+
 class ListModelsTests(unittest.TestCase):
     def test_only_generatecontent_models_returned_sorted(self):
         payload = {"models": [
