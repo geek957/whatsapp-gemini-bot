@@ -98,7 +98,7 @@ Settings → Secrets and variables → Actions.
 | `MAX_REPLY_PARTS` | Maximum messages per answer (`12`) |
 | `READ_MODE` | `queue` / `history` / `both` (`both`) |
 | `INCLUDE_OUTGOING` | `true` to process images you post yourself from the linked phone (`false`) |
-| `WINDOW_MINUTES` | Ignore images older than this (`60`) |
+| `WINDOW_MINUTES` | Ignore images older than this (`1440`) |
 | `MAX_IMAGES_PER_REPLY` | Images batched into one Gemini call (`6`) |
 | `MAX_REPLIES_PER_RUN` | Cap on replies per run (`5`) |
 | `PROVIDER` | `greenapi` / `meta` (`greenapi`) |

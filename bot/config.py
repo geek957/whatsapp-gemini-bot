@@ -82,7 +82,9 @@ class Config:
     # and the person posting are the same account, as in a personal automation group.
     include_outgoing: bool = False
     history_count: int = 40
-    window_minutes: int = 60
+    # Wide by design: GitHub's cron is best-effort and can be hours late, so a narrow
+    # window silently drops images. Duplicate replies are prevented by state, not by this.
+    window_minutes: int = 1440
     max_images_per_reply: int = 6
     max_image_bytes: int = 7 * 1024 * 1024
     max_replies_per_run: int = 5
@@ -174,7 +176,7 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         read_mode=read_mode,
         include_outgoing=get("INCLUDE_OUTGOING", "false").lower() in {"1", "true", "yes", "on"},
         history_count=_int("HISTORY_COUNT", get("HISTORY_COUNT", "40"), errors, 1),
-        window_minutes=_int("WINDOW_MINUTES", get("WINDOW_MINUTES", "60"), errors, 1),
+        window_minutes=_int("WINDOW_MINUTES", get("WINDOW_MINUTES", "1440"), errors, 1),
         max_images_per_reply=_int("MAX_IMAGES_PER_REPLY", get("MAX_IMAGES_PER_REPLY", "6"), errors, 1),
         max_image_bytes=_int("MAX_IMAGE_BYTES", get("MAX_IMAGE_BYTES", str(7 * 1024 * 1024)), errors, 1024),
         max_replies_per_run=_int("MAX_REPLIES_PER_RUN", get("MAX_REPLIES_PER_RUN", "5"), errors, 1),

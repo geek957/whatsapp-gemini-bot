@@ -52,7 +52,7 @@ jobs:
       COMMAND_PREFIX: ${{ vars.COMMAND_PREFIX || '/ask' }}
       READ_MODE: ${{ vars.READ_MODE || 'both' }}
       INCLUDE_OUTGOING: ${{ vars.INCLUDE_OUTGOING || 'false' }}
-      WINDOW_MINUTES: ${{ vars.WINDOW_MINUTES || '60' }}
+      WINDOW_MINUTES: ${{ vars.WINDOW_MINUTES || '1440' }}
       MAX_IMAGES_PER_REPLY: ${{ vars.MAX_IMAGES_PER_REPLY || '6' }}
       MAX_REPLIES_PER_RUN: ${{ vars.MAX_REPLIES_PER_RUN || '5' }}
       MAX_REPLY_CHARS: ${{ vars.MAX_REPLY_CHARS || '4000' }}
