@@ -46,8 +46,33 @@ class GeminiResult:
     truncated: bool = False
 
 
+# Errors that mean "this model is busy", not "this request is wrong".
+TRANSIENT_MARKERS = ("503", "UNAVAILABLE", "overloaded", "high demand", "429", "RESOURCE_EXHAUSTED")
+
+
+def _is_transient(error: Exception) -> bool:
+    message = str(error)
+    return any(marker.lower() in message.lower() for marker in TRANSIENT_MARKERS)
+
+
 def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -> GeminiResult:
-    """Send one prompt plus inline images and return the model's text."""
+    """Analyse with the configured model, falling back when a model is unavailable."""
+    models = [cfg.gemini_model, *cfg.gemini_model_fallbacks]
+    for index, model in enumerate(models):
+        try:
+            return _analyze_one(cfg, model, prompt, images, http)
+        except GeminiBlocked:
+            raise  # a content decision: another model is not the answer
+        except GeminiError as exc:
+            last_model = index == len(models) - 1
+            if last_model or not _is_transient(exc):
+                raise
+            LOG.warning("model %s unavailable (%s); falling back to %s",
+                        model, str(exc)[:120], models[index + 1])
+    raise GeminiError("no models configured")
+
+
+def _analyze_one(cfg: Config, model: str, prompt: str, images: list[GeminiImage], http) -> GeminiResult:
     if not prompt.strip():
         raise GeminiError("prompt is empty")
     usable = [image for image in images if image.normalised_mime() in SUPPORTED_MIME]
@@ -78,7 +103,7 @@ def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": generation_config,
     }
-    url = f"{cfg.gemini_api_base}/models/{cfg.gemini_model}:generateContent"
+    url = f"{cfg.gemini_api_base}/models/{model}:generateContent"
     try:
         payload = http(
             "POST", url,
@@ -121,7 +146,7 @@ def analyze(cfg: Config, prompt: str, images: list[GeminiImage], http=request) -
         )
     return GeminiResult(
         text=text,
-        model=cfg.gemini_model,
+        model=model,
         finish_reason=finish,
         prompt_tokens=int(usage.get("promptTokenCount") or 0),
         output_tokens=int(usage.get("candidatesTokenCount") or 0),

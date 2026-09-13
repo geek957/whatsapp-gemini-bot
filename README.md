@@ -90,6 +90,7 @@ Settings → Secrets and variables → Actions.
 | `TRIGGER_MODE` | `any_image` / `command` / `command_or_caption` (`command_or_caption`) |
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
 | `GEMINI_MODEL` | (`gemini-3.8-flash`) |
+| `GEMINI_MODEL_FALLBACKS` | Tried in order on 503/429 (`gemini-2.5-flash`) |
 | `PROMPT_PATH` | Which prompt file to use (`prompts/default.md`) |
 | `GEMINI_TEMPERATURE` | (`0`) — deterministic, required for strict templates |
 | `GEMINI_THINKING_BUDGET` | `0` off, `-1` model decides, or a token cap (`0`) |
@@ -217,7 +218,7 @@ being sent silently.
 ## Local development
 
 ```bash
-python3 -m unittest discover -s tests -v     # 120 tests, no network
+python3 -m unittest discover -s tests -v     # 125 tests, no network
 python3 -m bot.cli doctor                    # credential and connectivity check
 python3 -m bot.cli list-chats --groups-only  # find a group id without waiting for a message
 python3 -m bot.cli run --dry-run             # read and match, call nothing
@@ -267,6 +268,7 @@ prompts/default.md     the prompt sent with every image
 | Safety block | recorded and answered once, never retried |
 | One image of a batch fails to download | the rest are still analysed |
 | Provider unreachable | run reports the error and exits 0 so the schedule survives |
+| Model returns 503/429 | falls back to the next model in `GEMINI_MODEL_FALLBACKS` |
 | Corrupt state file | starts empty; worst case is one duplicate reply |
 | Two runs overlap | `concurrency` serialises them; state pushes union-merge on conflict |
 

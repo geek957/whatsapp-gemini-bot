@@ -88,11 +88,13 @@ class AnalyzeTests(unittest.TestCase):
         with self.assertRaises(GeminiError):
             analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
 
-    def test_http_failure_wrapped_as_gemini_error(self):
-        http = FakeHttp([HttpError(429, "gemini", b"rate limited")])
+    def test_non_transient_http_failure_raises_without_fallback(self):
+        http = FakeHttp([HttpError(400, "gemini", b"bad request")])
+        cfg = make_config(gemini_model_fallbacks=("gemini-2.5-flash",))
         with self.assertRaises(GeminiError) as ctx:
-            analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
-        self.assertIn("429", str(ctx.exception))
+            analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertIn("400", str(ctx.exception))
+        self.assertEqual(len(http.calls), 1, "a bad request must not be retried on another model")
 
     def test_multipart_text_is_concatenated(self):
         payload = {"candidates": [{"content": {"parts": [{"text": "a"}, {"text": "b"}]}, "finishReason": "STOP"}]}
@@ -136,6 +138,44 @@ class ThinkingBudgetTests(unittest.TestCase):
         http = FakeHttp([json_response(OK_PAYLOAD)])
         result = analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
         self.assertFalse(result.truncated)
+
+
+class ModelFallbackTests(unittest.TestCase):
+    """The newest models return 503 under load; that must not drop the message."""
+
+    def test_503_falls_back_to_the_next_model(self):
+        http = FakeHttp([HttpError(503, "gemini", b"high demand"), json_response(OK_PAYLOAD)])
+        cfg = make_config(gemini_model="gemini-3.8-flash", gemini_model_fallbacks=("gemini-2.5-flash",))
+        result = analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertEqual(result.model, "gemini-2.5-flash")
+        self.assertIn("gemini-3.8-flash", http.calls[0]["url"])
+        self.assertIn("gemini-2.5-flash", http.calls[1]["url"])
+
+    def test_429_also_falls_back(self):
+        http = FakeHttp([HttpError(429, "gemini", b"RESOURCE_EXHAUSTED"), json_response(OK_PAYLOAD)])
+        cfg = make_config(gemini_model_fallbacks=("gemini-2.5-flash",))
+        self.assertEqual(analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http).model,
+                         "gemini-2.5-flash")
+
+    def test_exhausting_every_model_raises(self):
+        http = FakeHttp([HttpError(503, "a", b"high demand"), HttpError(503, "b", b"high demand")])
+        cfg = make_config(gemini_model_fallbacks=("gemini-2.5-flash",))
+        with self.assertRaises(GeminiError):
+            analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertEqual(len(http.calls), 2)
+
+    def test_safety_block_never_falls_back(self):
+        http = FakeHttp([json_response({"promptFeedback": {"blockReason": "SAFETY"}}), json_response(OK_PAYLOAD)])
+        cfg = make_config(gemini_model_fallbacks=("gemini-2.5-flash",))
+        with self.assertRaises(GeminiBlocked):
+            analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertEqual(len(http.calls), 1, "another model would block the same content")
+
+    def test_primary_success_never_calls_a_fallback(self):
+        http = FakeHttp([json_response(OK_PAYLOAD)])
+        cfg = make_config(gemini_model_fallbacks=("gemini-2.5-flash",))
+        analyze(cfg, "x", [GeminiImage("image/png", b"1")], http=http)
+        self.assertEqual(len(http.calls), 1)
 
 
 class ListModelsTests(unittest.TestCase):

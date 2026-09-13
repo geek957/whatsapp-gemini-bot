@@ -63,6 +63,8 @@ class Config:
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
+    # Newest models return 503 UNAVAILABLE under load. Tried in order after the primary.
+    gemini_model_fallbacks: tuple[str, ...] = ("gemini-2.5-flash",)
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     # Deterministic output: the summary template must not be paraphrased run to run.
     gemini_temperature: float = 0.0
@@ -166,6 +168,7 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         chat_ids=_split(get("WHATSAPP_CHAT_IDS")),
         gemini_api_key=get("GEMINI_API_KEY"),
         gemini_model=get("GEMINI_MODEL", "gemini-3.8-flash"),
+        gemini_model_fallbacks=_split(get("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")),
         gemini_api_base=get("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
         gemini_temperature=_float("GEMINI_TEMPERATURE", get("GEMINI_TEMPERATURE", "0"), errors),
         gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "32768"), errors, 1),
