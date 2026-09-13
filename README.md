@@ -92,7 +92,8 @@ Settings → Secrets and variables → Actions.
 | `TRIGGER_MODE` | `any_image` / `command` / `command_or_caption` (`command_or_caption`) |
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
 | `GEMINI_MODEL` | (`gemini-3.8-flash`) |
-| `GEMINI_MODEL_FALLBACKS` | Tried in order on 503/429 (`gemini-2.5-flash`) |
+| `GEMINI_MODEL_FALLBACKS` | Tried in order on 503/429 (`gemini-3.5-flash,gemini-flash-latest,gemini-2.5-flash`) |
+| `GEMINI_RETRIES` | Attempts per model before moving to the next (`2`) |
 | `PROMPT_PATH` | Which prompt file to use (`prompts/default.md`) |
 | `GEMINI_TEMPERATURE` | (`0`) — deterministic, required for strict templates |
 | `GEMINI_THINKING_BUDGET` | `0` off, `-1` model decides, or a token cap (`0`) |
@@ -235,6 +236,19 @@ documented and `[ILLEGIBLE]` for unreadable values, and forbid inference. Pair i
 
 Select it with the `PROMPT_PATH` variable rather than editing code.
 
+## When Gemini sheds your request
+
+A busy model returns `503 UNAVAILABLE` ("experiencing high demand") and takes roughly a minute
+to do so. Crucially this is sensitive to request size: a five-token text prompt can succeed
+while a three-image request from the same key and model is rejected seconds later. "The model
+is up" and "the model will accept this request" are different things.
+
+Because capacity is per-model, breadth beats persistence: `GEMINI_RETRIES=2` per model and
+several entries in `GEMINI_MODEL_FALLBACKS` recovers faster than hammering one model. When
+everything is overloaded the run logs each failed chat and exits 0, leaving those images
+unrecorded so the next run retries them. Nothing is lost and no quota is spent on a reply that
+was never sent.
+
 ## Thinking tokens will truncate your replies
 
 Gemini 2.5-class models are *thinking* models, and reasoning tokens are charged against
@@ -309,6 +323,7 @@ prompts/default.md     the prompt sent with every image
 | One image of a batch fails to download | the rest are still analysed |
 | Provider unreachable | run reports the error and exits 0 so the schedule survives |
 | Model returns 503/429 | falls back to the next model in `GEMINI_MODEL_FALLBACKS` |
+| Every model overloaded | run logs each failed chat, exits 0, images stay queued for the next run |
 | Corrupt state file | starts empty; worst case is one duplicate reply |
 | Two runs overlap | `concurrency` serialises them; state pushes union-merge on conflict |
 

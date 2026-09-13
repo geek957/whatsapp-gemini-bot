@@ -64,8 +64,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     if report.failed and args.strict:
         return 1
     if report.failed:
-        LOG.warning("run completed with %d error(s); exiting 0 so the schedule keeps running",
-                    len(report.errors))
+        failed_chats = [o for o in report.outcomes if o.status == "failed"]
+        LOG.warning(
+            "run had %d failed chat(s) and %d run error(s); exiting 0 so a transient outage "
+            "does not disable the schedule. Unanswered images stay queued for the next run.",
+            len(failed_chats), len(report.errors))
+        for outcome in failed_chats:
+            LOG.warning("  %s (%d image(s)): %s", outcome.chat_name or outcome.chat_id,
+                        outcome.image_count, outcome.detail)
     return 0
 
 

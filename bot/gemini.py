@@ -110,7 +110,7 @@ def _analyze_one(cfg: Config, model: str, prompt: str, images: list[GeminiImage]
             headers={"x-goog-api-key": cfg.gemini_api_key},
             json_body=body,
             timeout=max(cfg.http_timeout, 60),
-            retries=cfg.http_retries,
+            retries=cfg.gemini_retries,
         ).json() or {}
     except HttpError as exc:
         raise GeminiError(f"Gemini request failed: {exc}") from exc
