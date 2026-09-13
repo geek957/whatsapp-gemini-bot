@@ -16,7 +16,7 @@ class ConfigTests(unittest.TestCase):
         cfg = config_module.from_env(dict(BASE_ENV))
         cfg.raise_for_errors()
         self.assertEqual(cfg.provider, "greenapi")
-        self.assertEqual(cfg.gemini_model, "gemini-2.5-flash")
+        self.assertEqual(cfg.gemini_model, "gemini-3.8-flash")
         self.assertEqual(cfg.trigger_mode, "command_or_caption")
         self.assertEqual(cfg.read_mode, "both")
         self.assertEqual(cfg.gemini_max_output_tokens, 32768)

@@ -62,9 +62,10 @@ class Config:
     chat_ids: tuple[str, ...] = ()
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
-    gemini_temperature: float = 0.4
+    # Deterministic output: the summary template must not be paraphrased run to run.
+    gemini_temperature: float = 0.0
     # A cap, not a reservation: billing follows tokens actually generated, so this is
     # set high and WhatsApp message chunking is the real limit on reply length.
     gemini_max_output_tokens: int = 32768
@@ -162,9 +163,9 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         meta_api_base=get("META_API_BASE", "https://graph.facebook.com/v21.0").rstrip("/"),
         chat_ids=_split(get("WHATSAPP_CHAT_IDS")),
         gemini_api_key=get("GEMINI_API_KEY"),
-        gemini_model=get("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=get("GEMINI_MODEL", "gemini-3.8-flash"),
         gemini_api_base=get("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
-        gemini_temperature=_float("GEMINI_TEMPERATURE", get("GEMINI_TEMPERATURE", "0.4"), errors),
+        gemini_temperature=_float("GEMINI_TEMPERATURE", get("GEMINI_TEMPERATURE", "0"), errors),
         gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "32768"), errors, 1),
         gemini_thinking_budget=_int("GEMINI_THINKING_BUDGET", get("GEMINI_THINKING_BUDGET", "0"), errors, -1),
         prompt_path=prompt_path,

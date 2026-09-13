@@ -89,7 +89,9 @@ Settings → Secrets and variables → Actions.
 | `WHATSAPP_CHAT_IDS` | Comma-separated chats to serve. **Set this** — empty means every chat the account is in |
 | `TRIGGER_MODE` | `any_image` / `command` / `command_or_caption` (`command_or_caption`) |
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
-| `GEMINI_MODEL` | (`gemini-2.5-flash`) |
+| `GEMINI_MODEL` | (`gemini-3.8-flash`) |
+| `PROMPT_PATH` | Which prompt file to use (`prompts/default.md`) |
+| `GEMINI_TEMPERATURE` | (`0`) — deterministic, required for strict templates |
 | `GEMINI_THINKING_BUDGET` | `0` off, `-1` model decides, or a token cap (`0`) |
 | `GEMINI_MAX_OUTPUT_TOKENS` | (`32768`) — a cap, not a reservation |
 | `MAX_REPLY_CHARS` | Characters per WhatsApp message (`4000`) |
@@ -157,6 +159,38 @@ stop the pull queue from filling.
 
 GitHub also disables cron on repositories with no commits for 60 days; `keepalive.yml`
 commits a timestamp weekly to prevent that.
+
+## Choosing a model
+
+Model choice is measured, not assumed. `scripts/bench_models.py` runs candidates over real
+images from a chat and scores template adherence — sections present, correct order, whether
+missing fields are flagged, and markdown leakage:
+
+```bash
+python3 scripts/bench_models.py --chat 1203634...@g.us --prompt prompts/clinical-summary.md
+```
+
+On a three-page handwritten clinical form, `gemini-3.8-flash` beat `gemini-2.5-flash`: all
+three flash models reproduced the template exactly, but 2.5-flash filed heart sounds under
+CNS, left CVS empty, dropped a documented `PALLOR PRESENT`, and misread breath sounds.
+`gemini-3.5-flash` was 3x slower and ignored the `[EMPTY]` rule. Pro models were not usable
+on a free-tier key (429/404).
+
+A consumer Gemini subscription does **not** grant API access or quota — AI Studio keys are
+billed separately.
+
+Re-run the benchmark on your own documents before trusting any model. And for anything
+consequential, a person must check the output against the source images: these models still
+garble words and can disagree on a number as important as a haemoglobin value.
+
+## Strict output templates
+
+`prompts/clinical-summary.md` shows the pattern for a fixed-format extraction: state the
+template verbatim, forbid extra sections and markdown, require `[EMPTY]` for anything not
+documented and `[ILLEGIBLE]` for unreadable values, and forbid inference. Pair it with
+`GEMINI_TEMPERATURE=0` so the same images produce the same document.
+
+Select it with the `PROMPT_PATH` variable rather than editing code.
 
 ## Thinking tokens will truncate your replies
 
