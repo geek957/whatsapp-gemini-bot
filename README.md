@@ -146,11 +146,30 @@ This cannot cause a reply loop. Green API reports a phone-sent message as
 the former is ever read. In the history sweep, where the two are indistinguishable, safety
 comes from the pipeline acting only on images while the bot only ever sends text.
 
-## Timing, and what "every 5 minutes" really means
+## Timing, and triggering a run yourself
 
-5 minutes is GitHub's cron minimum, but scheduled runs sit in a best-effort queue and
-routinely fire 10–20+ minutes late when Actions is busy. Nothing is lost — the Green API
-queue holds messages until read, and the history sweep backfills anything the queue missed.
+The schedule is `7,37 * * * *` — twice an hour, deliberately off the hour. GitHub runs
+schedules on a best-effort queue and sheds the most load at `:00`/`:30`. A `*/5` schedule was
+throttled to **two runs in six hours** on this repository, so asking for less turned out to be
+more reliable than asking for more.
+
+Nothing is lost when a tick is skipped: the Green API queue holds messages until read, the
+history sweep backfills, and `WINDOW_MINUTES=1440` still admits day-old images.
+
+When you want an answer now, don't wait for cron:
+
+```bash
+scripts/trigger.sh            # dispatch and wait, printing the run's counters
+scripts/trigger.sh --dry-run  # match messages without calling Gemini or replying
+scripts/trigger.sh --doctor   # connectivity checks only
+```
+
+It reuses the credential git already stored, so there is nothing to configure. You can also
+press **Run workflow** in the Actions tab, or process locally without GitHub at all:
+
+```bash
+set -a && . ./.env && set +a && python3 -m bot.cli run
+```
 
 For replies in ~30–60s instead, deploy `relay/cloudflare-worker.js` (free tier): it turns a
 provider webhook into a `repository_dispatch`, which this workflow already listens for. A

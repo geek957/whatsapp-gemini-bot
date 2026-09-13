@@ -2,10 +2,12 @@ name: whatsapp-gemini
 
 on:
   schedule:
-    # Every 5 minutes is the GitHub minimum. Actions runs schedules on a best-effort
-    # queue, so expect real intervals of 5-20+ minutes under load. Nothing is lost when a
-    # tick is late: the Green API queue holds messages and the history sweep backfills.
-    - cron: "*/5 * * * *"
+    # Twice an hour, deliberately off the hour: GitHub runs schedules on a best-effort queue
+    # and drops the most work at :00 and :30 when everyone's cron lands. A */5 schedule was
+    # throttled to roughly two runs in six hours on this repository, so asking for less is
+    # more likely to be honoured. Nothing is lost when a tick is late -- the Green API queue
+    # holds messages, the history sweep backfills, and the 24h window still admits them.
+    - cron: "7,37 * * * *"
   # Fired by relay/cloudflare-worker.js when a matching message arrives, for fast replies.
   repository_dispatch:
     types: [whatsapp-message]
