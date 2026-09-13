@@ -266,19 +266,25 @@ def _handle_batch(cfg: Config, provider: Provider, state: State, batch: Batch,
 
     outcome.prompt_tokens = result.prompt_tokens
     outcome.output_tokens = result.output_tokens
-    reply_text = _format_reply(result.text, len(images))
-    if not _try_send(provider, batch, cfg, reply_text, outcome):
-        return outcome  # unmarked, so the next run retries
+    parts = split_reply(result.text, cfg.max_reply_chars, cfg.max_reply_parts)
+    for index, part in enumerate(parts):
+        if not _try_send(provider, batch, cfg, part, outcome, quote=index == 0):
+            return outcome  # unmarked, so the next run retries the whole batch
 
     outcome.status = "replied"
-    outcome.detail = f"{len(reply_text)} chars"
+    outcome.detail = f"{len(result.text)} chars in {len(parts)} message(s)"
+    if result.truncated:
+        outcome.detail += " (model output hit MAX_TOKENS)"
     _mark_all(state, batch, now)
     return outcome
 
 
-def _try_send(provider: Provider, batch: Batch, cfg: Config, text: str, outcome: ChatOutcome) -> bool:
+def _try_send(provider: Provider, batch: Batch, cfg: Config, text: str, outcome: ChatOutcome,
+              quote: bool = True) -> bool:
     try:
-        outcome.reply_id = provider.send_text(batch.chat_id, text, reply_to=batch.reply_to)
+        # Only the first part quotes the image, so a multi-part answer reads as one thread.
+        sent_id = provider.send_text(batch.chat_id, text, reply_to=batch.reply_to if quote else None)
+        outcome.reply_id = outcome.reply_id or sent_id
         return True
     except HttpError as exc:
         LOG.error("send failed for %s: %s", batch.chat_id, exc)
@@ -296,13 +302,38 @@ def _compose_prompt(base_prompt: str, batch: Batch) -> str:
     return "\n\n".join(parts)
 
 
-def _format_reply(text: str, image_count: int) -> str:
-    """WhatsApp rejects very long bodies; 4096 chars is the practical text limit."""
-    limit = 4000
+def split_reply(text: str, limit: int, max_parts: int) -> list[str]:
+    """Split a long answer into WhatsApp-sized messages, preferring natural breaks.
+
+    A transcription of several document pages easily exceeds any single message, so the
+    answer is chunked at paragraph, then line, then word boundaries rather than truncated.
+    """
     body = text.strip()
-    if len(body) > limit:
-        body = body[: limit - 20].rstrip() + "\n\n[truncated]"
-    return body
+    if len(body) <= limit:
+        return [body]
+
+    chunks: list[str] = []
+    remaining = body
+    while remaining and len(chunks) < max_parts:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        window = remaining[:limit]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"))
+        if cut < limit // 2:  # no useful break: fall back to a word, then a hard cut
+            cut = window.rfind(" ")
+        if cut < limit // 2:
+            cut = limit
+        chunks.append(remaining[:cut].rstrip())
+        remaining = remaining[cut:].lstrip()
+
+    if remaining and len(chunks) == max_parts:
+        chunks[-1] = chunks[-1].rstrip() + "\n\n[…truncated, raise MAX_REPLY_PARTS]"
+
+    total = len(chunks)
+    if total == 1:
+        return chunks
+    return [f"({index}/{total}) {chunk}" for index, chunk in enumerate(chunks, 1)]
 
 
 def _mark_all(state: State, batch: Batch, now: int) -> None:

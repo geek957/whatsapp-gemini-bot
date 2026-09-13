@@ -65,7 +65,9 @@ class Config:
     gemini_model: str = "gemini-2.5-flash"
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_temperature: float = 0.4
-    gemini_max_output_tokens: int = 4096
+    # A cap, not a reservation: billing follows tokens actually generated, so this is
+    # set high and WhatsApp message chunking is the real limit on reply length.
+    gemini_max_output_tokens: int = 32768
     # Gemini 2.5+ are thinking models and charge reasoning tokens against
     # maxOutputTokens, which silently truncates the visible answer. 0 disables thinking
     # (flash only), -1 lets the model decide, a positive value caps it.
@@ -83,6 +85,9 @@ class Config:
     max_images_per_reply: int = 6
     max_image_bytes: int = 7 * 1024 * 1024
     max_replies_per_run: int = 5
+    # WhatsApp rejects very long bodies; longer answers are split across messages.
+    max_reply_chars: int = 4000
+    max_reply_parts: int = 12
 
     state_path: Path = Path(".state/state.json")
     state_retention_days: int = 14
@@ -160,7 +165,7 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         gemini_model=get("GEMINI_MODEL", "gemini-2.5-flash"),
         gemini_api_base=get("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
         gemini_temperature=_float("GEMINI_TEMPERATURE", get("GEMINI_TEMPERATURE", "0.4"), errors),
-        gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "4096"), errors, 1),
+        gemini_max_output_tokens=_int("GEMINI_MAX_OUTPUT_TOKENS", get("GEMINI_MAX_OUTPUT_TOKENS", "32768"), errors, 1),
         gemini_thinking_budget=_int("GEMINI_THINKING_BUDGET", get("GEMINI_THINKING_BUDGET", "0"), errors, -1),
         prompt_path=prompt_path,
         trigger_mode=trigger_mode,
@@ -172,6 +177,8 @@ def from_env(env: dict[str, str] | None = None) -> Config:
         max_images_per_reply=_int("MAX_IMAGES_PER_REPLY", get("MAX_IMAGES_PER_REPLY", "6"), errors, 1),
         max_image_bytes=_int("MAX_IMAGE_BYTES", get("MAX_IMAGE_BYTES", str(7 * 1024 * 1024)), errors, 1024),
         max_replies_per_run=_int("MAX_REPLIES_PER_RUN", get("MAX_REPLIES_PER_RUN", "5"), errors, 1),
+        max_reply_chars=_int("MAX_REPLY_CHARS", get("MAX_REPLY_CHARS", "4000"), errors, 500),
+        max_reply_parts=_int("MAX_REPLY_PARTS", get("MAX_REPLY_PARTS", "12"), errors, 1),
         state_path=Path(get("STATE_PATH", ".state/state.json")),
         state_retention_days=_int("STATE_RETENTION_DAYS", get("STATE_RETENTION_DAYS", "14"), errors, 1),
         state_max_ids=_int("STATE_MAX_IDS", get("STATE_MAX_IDS", "5000"), errors, 100),

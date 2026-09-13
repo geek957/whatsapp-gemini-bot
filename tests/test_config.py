@@ -19,7 +19,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.gemini_model, "gemini-2.5-flash")
         self.assertEqual(cfg.trigger_mode, "command_or_caption")
         self.assertEqual(cfg.read_mode, "both")
-        self.assertEqual(cfg.gemini_max_output_tokens, 4096)
+        self.assertEqual(cfg.gemini_max_output_tokens, 32768)
         self.assertEqual(cfg.gemini_thinking_budget, 0, "thinking must be off or replies truncate")
         self.assertFalse(cfg.dry_run)
 

@@ -1,7 +1,7 @@
 import unittest
 
 from bot.gemini import GeminiBlocked, GeminiError, GeminiResult
-from bot.pipeline import run
+from bot.pipeline import run, split_reply
 from bot.state import State
 from tests.helpers import FakeProvider, image_message, make_config, text_message
 
@@ -212,13 +212,41 @@ class FailureTests(unittest.TestCase):
         self.assertTrue(report.failed)
         self.assertIn("fetch_messages failed", report.errors[0])
 
-    def test_long_replies_are_truncated_for_whatsapp(self):
+    def test_long_replies_are_split_across_messages(self):
+        provider = FakeProvider(inbound=[image_message("M1")])
+        body = "\n\n".join(f"paragraph {i} " + "y" * 400 for i in range(12))
+        report = run(make_config(trigger_mode="any_image", max_reply_chars=1000, max_reply_parts=8),
+                     provider, State(), now=NOW, analyzer=ok_analyzer(text=body))
+        self.assertGreater(len(provider.sent), 1)
+        for _, text, _ in provider.sent:
+            self.assertLessEqual(len(text), 1100)
+        self.assertTrue(provider.sent[0][1].startswith("(1/"))
+        self.assertEqual(report.outcomes[0].status, "replied")
+        self.assertIn("message(s)", report.outcomes[0].detail)
+
+    def test_only_the_first_part_quotes_the_image(self):
+        provider = FakeProvider(inbound=[image_message("M1")])
+        body = "\n\n".join("z" * 500 for _ in range(6))
+        run(make_config(trigger_mode="any_image", max_reply_chars=600, max_reply_parts=8),
+            provider, State(), now=NOW, analyzer=ok_analyzer(text=body))
+        self.assertEqual(provider.sent[0][2], "M1")
+        self.assertIsNone(provider.sent[1][2])
+
+    def test_short_replies_stay_a_single_unnumbered_message(self):
         provider = FakeProvider(inbound=[image_message("M1")])
         run(make_config(trigger_mode="any_image"), provider, State(), now=NOW,
-            analyzer=ok_analyzer(text="x" * 9000))
-        _, text, _ = provider.sent[0]
-        self.assertLessEqual(len(text), 4000)
-        self.assertTrue(text.endswith("[truncated]"))
+            analyzer=ok_analyzer(text="short answer"))
+        self.assertEqual(len(provider.sent), 1)
+        self.assertEqual(provider.sent[0][1], "short answer")
+
+    def test_failure_midway_through_parts_leaves_batch_unmarked(self):
+        provider = FakeProvider(inbound=[image_message("M1")], fail_send=True)
+        state = State()
+        body = "\n\n".join("w" * 500 for _ in range(6))
+        report = run(make_config(trigger_mode="any_image", max_reply_chars=600),
+                     provider, state, now=NOW, analyzer=ok_analyzer(text=body))
+        self.assertEqual(report.outcomes[0].status, "failed")
+        self.assertFalse(state.seen("M1"))
 
 
 class DryRunTests(unittest.TestCase):
@@ -259,6 +287,41 @@ class ReportTests(unittest.TestCase):
         provider = FakeProvider(inbound=[image_message("M1")])
         report = run(make_config(trigger_mode="any_image"), provider, State(), now=NOW, analyzer=ok_analyzer())
         json.dumps(report.to_dict())
+
+
+class SplitReplyTests(unittest.TestCase):
+    def test_returns_one_chunk_when_under_the_limit(self):
+        self.assertEqual(split_reply("hello", 100, 5), ["hello"])
+
+    def test_splits_on_paragraph_boundaries(self):
+        text = "a" * 90 + "\n\n" + "b" * 90
+        parts = split_reply(text, 100, 5)
+        self.assertEqual(len(parts), 2)
+        self.assertTrue(parts[0].endswith("a"))
+        self.assertTrue(parts[1].endswith("b"))
+
+    def test_numbers_every_part_when_split(self):
+        parts = split_reply("\n".join("line " + "c" * 40 for _ in range(20)), 200, 9)
+        self.assertGreater(len(parts), 1)
+        for index, part in enumerate(parts, 1):
+            self.assertTrue(part.startswith(f"({index}/{len(parts)}) "))
+
+    def test_hard_wraps_text_with_no_breaks(self):
+        parts = split_reply("d" * 500, 100, 9)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(len(p) <= 120 for p in parts))
+
+    def test_flags_when_max_parts_reached(self):
+        parts = split_reply("e" * 10000, 100, 2)
+        self.assertEqual(len(parts), 2)
+        self.assertIn("truncated", parts[-1])
+
+    def test_no_content_lost_when_within_part_budget(self):
+        body = "\n\n".join(f"para{i} " + "f" * 200 for i in range(10))
+        parts = split_reply(body, 500, 20)
+        rejoined = " ".join(p.split(") ", 1)[1] for p in parts)
+        for i in range(10):
+            self.assertIn(f"para{i}", rejoined)
 
 
 if __name__ == "__main__":

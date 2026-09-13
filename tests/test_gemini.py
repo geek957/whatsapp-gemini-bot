@@ -109,7 +109,7 @@ class ThinkingBudgetTests(unittest.TestCase):
         analyze(make_config(), "x", [GeminiImage("image/png", b"1")], http=http)
         cfg_sent = http.calls[0]["json"]["generationConfig"]
         self.assertEqual(cfg_sent["thinkingConfig"], {"thinkingBudget": 0})
-        self.assertEqual(cfg_sent["maxOutputTokens"], 4096)
+        self.assertEqual(cfg_sent["maxOutputTokens"], 32768)
 
     def test_positive_budget_passed_through(self):
         http = FakeHttp([json_response(OK_PAYLOAD)])

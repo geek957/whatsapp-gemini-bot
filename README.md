@@ -91,7 +91,9 @@ Settings → Secrets and variables → Actions.
 | `COMMAND_PREFIX` | Command that triggers a reply (`/ask`) |
 | `GEMINI_MODEL` | (`gemini-2.5-flash`) |
 | `GEMINI_THINKING_BUDGET` | `0` off, `-1` model decides, or a token cap (`0`) |
-| `GEMINI_MAX_OUTPUT_TOKENS` | (`4096`) |
+| `GEMINI_MAX_OUTPUT_TOKENS` | (`32768`) — a cap, not a reservation |
+| `MAX_REPLY_CHARS` | Characters per WhatsApp message (`4000`) |
+| `MAX_REPLY_PARTS` | Maximum messages per answer (`12`) |
 | `READ_MODE` | `queue` / `history` / `both` (`both`) |
 | `INCLUDE_OUTGOING` | `true` to process images you post yourself from the linked phone (`false`) |
 | `WINDOW_MINUTES` | Ignore images older than this (`60`) |
@@ -118,8 +120,12 @@ The `*/5 * * * *` schedule then runs on its own.
 | `command_or_caption` | as `command`, plus any image that carries a caption, which becomes the question |
 
 The caption after the prefix is appended to the prompt, so `/ask is this itemised?` asks
-exactly that. Multiple images in the same chat are answered in **one** Gemini call and
-**one** reply.
+exactly that. Multiple images in the same chat are answered in **one** Gemini call.
+
+Long answers are **split across numbered WhatsApp messages** (`(1/8)`, `(2/8)`, …) rather
+than truncated, because transcribing a few document pages easily produces 30,000 characters.
+Only the first part quotes the original image, so the answer reads as one thread. Default
+capacity is 12 messages of 4,000 characters; past that the last message says so explicitly.
 
 Edit `prompts/default.md` to change the bot's behaviour and tone. No code change needed.
 
@@ -158,8 +164,9 @@ Gemini 2.5-class models are *thinking* models, and reasoning tokens are charged 
 `maxOutputTokens`. With the API default budget, a request can spend ~980 of 1024 tokens
 thinking and emit a reply that stops mid-word, reported as `finishReason: MAX_TOKENS`.
 
-This bot therefore sends `thinkingConfig.thinkingBudget: 0` by default and allows 4096
-output tokens. If you switch to a model that cannot disable thinking (`gemini-2.5-pro`), set
+This bot therefore sends `thinkingConfig.thinkingBudget: 0` by default and allows 32768
+output tokens. That ceiling costs nothing when unused — billing follows tokens actually
+generated — so it is set high deliberately. If you switch to a model that cannot disable thinking (`gemini-2.5-pro`), set
 `GEMINI_THINKING_BUDGET=-1` and raise `GEMINI_MAX_OUTPUT_TOKENS` well above the answer you
 want. A truncated response is logged as a warning and flagged on the result rather than
 being sent silently.
@@ -176,7 +183,7 @@ being sent silently.
 ## Local development
 
 ```bash
-python3 -m unittest discover -s tests -v     # 111 tests, no network
+python3 -m unittest discover -s tests -v     # 120 tests, no network
 python3 -m bot.cli doctor                    # credential and connectivity check
 python3 -m bot.cli list-chats --groups-only  # find a group id without waiting for a message
 python3 -m bot.cli run --dry-run             # read and match, call nothing
