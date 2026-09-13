@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile
+        run: python -m compileall -q bot tests
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Config validation rejects an empty environment
+        run: |
+          set +e
+          output="$(python -m bot.cli doctor 2>&1)"
+          code=$?
+          set -e
+          echo "$output"
+          [ "$code" = "2" ] || { echo "expected exit 2 for missing config, got $code" >&2; exit 1; }
+      - name: Shell script syntax
+        run: bash -n scripts/state_sync.sh

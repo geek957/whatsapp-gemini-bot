@@ -1,0 +1,88 @@
+name: whatsapp-gemini
+
+on:
+  schedule:
+    # Every 5 minutes is the GitHub minimum. Actions runs schedules on a best-effort
+    # queue, so expect real intervals of 5-20+ minutes under load. Nothing is lost when a
+    # tick is late: the Green API queue holds messages and the history sweep backfills.
+    - cron: "*/5 * * * *"
+  # Fired by relay/cloudflare-worker.js when a matching message arrives, for fast replies.
+  repository_dispatch:
+    types: [whatsapp-message]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Read and match, but call neither Gemini nor WhatsApp"
+        type: boolean
+        default: false
+      doctor:
+        description: "Run connectivity checks instead of processing"
+        type: boolean
+        default: false
+
+# Overlapping runs would double-reply, so serialise them. Queued runs are kept rather
+# than cancelled: a cancelled run would drop messages it already pulled off the queue.
+concurrency:
+  group: whatsapp-gemini
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push the dedupe state branch
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROVIDER: ${{ vars.PROVIDER || 'greenapi' }}
+      GREEN_API_INSTANCE_ID: ${{ secrets.GREEN_API_INSTANCE_ID }}
+      GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+      GREEN_API_BASE: ${{ vars.GREEN_API_BASE || 'https://api.green-api.com' }}
+      GREEN_API_MEDIA_BASE: ${{ vars.GREEN_API_MEDIA_BASE || 'https://media.green-api.com' }}
+      META_PHONE_NUMBER_ID: ${{ secrets.META_PHONE_NUMBER_ID }}
+      META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      WHATSAPP_CHAT_IDS: ${{ vars.WHATSAPP_CHAT_IDS }}
+      TRIGGER_MODE: ${{ vars.TRIGGER_MODE || 'command_or_caption' }}
+      COMMAND_PREFIX: ${{ vars.COMMAND_PREFIX || '/ask' }}
+      READ_MODE: ${{ vars.READ_MODE || 'both' }}
+      WINDOW_MINUTES: ${{ vars.WINDOW_MINUTES || '60' }}
+      MAX_IMAGES_PER_REPLY: ${{ vars.MAX_IMAGES_PER_REPLY || '6' }}
+      MAX_REPLIES_PER_RUN: ${{ vars.MAX_REPLIES_PER_RUN || '5' }}
+      LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+      STATE_BRANCH: bot-state
+      STATE_PATH: .state/state.json
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # No dependencies to install: the bot is standard-library only.
+
+      - name: Pull dedupe state
+        run: |
+          chmod +x scripts/state_sync.sh
+          scripts/state_sync.sh pull "$STATE_BRANCH" "$STATE_PATH"
+
+      - name: Doctor
+        if: ${{ inputs.doctor }}
+        run: python3 -m bot.cli doctor
+
+      - name: Process new images
+        if: ${{ !inputs.doctor }}
+        run: |
+          python3 -m bot.cli run ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Push dedupe state
+        if: ${{ always() && !inputs.doctor }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/state_sync.sh push "$STATE_BRANCH" "$STATE_PATH" \
+            "state: run ${{ github.run_number }} (${{ github.event_name }})"
+
