@@ -56,11 +56,27 @@ P/A:
 
 1. Fill every field from the images only. Never invent, infer, or complete a value that is
    not legible in the images.
-2. If a field is not documented in the images, keep the heading and write `[EMPTY]` after it.
-   Never silently omit a field and never guess.
-3. Keep units and formatting exactly as recorded (for example `110/90 MMHG`, `98% ON ROOM
+2. Every label that ends in `:` or `-` must be followed by its value **on the same line**.
+   Never put the value on the next line and never insert a blank line between a label and
+   its value. Correct: `ORAL CAVITY : CONGESTION PRESENT`. Wrong: `ORAL CAVITY :` then the
+   finding on the following line.
+3. Distinguish the two placeholders precisely:
+   - `[EMPTY]` — the field exists in the record but was left blank, or the field does not
+     appear in the records at all.
+   - `[ILLEGIBLE]` — something is written there but cannot be read reliably. Write whatever
+     part is readable first, then `[ILLEGIBLE]`.
+   Never use `[ILLEGIBLE]` for a blank field, and never guess at a value to avoid either.
+4. Keep units and formatting exactly as recorded (for example `110/90 MMHG`, `98% ON ROOM
    AIR`, `102.9F`, `131MG/DL`, `122BPM`).
-4. If the records span several dates, summarise the most recent documented state and mention
-   the trend only where the records state one.
-5. If a value is partly illegible, write what is readable followed by `[ILLEGIBLE]`.
-6. Output the template and nothing else.
+5. Put each finding under the correct system. Heart sounds (S1, S2, murmurs) belong to `CVS`,
+   never to `CNS`. Breath sounds and air entry belong to `RS`. Consciousness, orientation and
+   focal neurological deficits belong to `CNS`. Abdominal findings belong to `P/A`.
+6. Record general-examination findings that are documented, including whether pallor,
+   icterus, cyanosis, clubbing and koilonychia are present or absent. Do not omit a positive
+   finding such as `PALLOR PRESENT`.
+7. Expand clinical shorthand into the words used in the template's example where the meaning
+   is unambiguous (`H/O` to `HISTORY OF`, `SOB` to `SHORTNESS OF BREATH`, `C` with a bar to
+   `WITH`). Never expand an abbreviation you are not certain of — keep it verbatim instead.
+8. If the records span several dates, summarise the most recent documented state and mention
+   a trend only where the records state one.
+9. Output the template and nothing else.
