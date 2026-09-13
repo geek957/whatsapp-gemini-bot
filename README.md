@@ -35,8 +35,16 @@ as the compliant alternative, at the cost of the group requirement.
 
 1. Create an account at green-api.com and create an instance.
 2. Scan the QR code with the WhatsApp account that should act as the bot.
-3. In the instance settings, set `incomingWebhook` to **yes** and leave `webhookUrl`
-   **empty** — that is what makes messages accumulate in the pull queue.
+3. In the instance settings, under **Webhooks**:
+   - turn **on** "Receive webhooks on incoming messages and files" (the API calls this
+     `incomingWebhook`);
+   - leave **Webhook Url** empty;
+   - leave every other toggle off — "messages sent from phone" and "sent messages statuses"
+     only fill the queue with events the bot discards;
+   - click **Save Changes**.
+
+   An empty Webhook Url plus that toggle is what makes messages accumulate in the pull
+   queue. Setting a URL sends them there instead and the queue stays empty.
 4. Note the `idInstance` and `apiTokenInstance`.
 
 ### 2. Gemini key

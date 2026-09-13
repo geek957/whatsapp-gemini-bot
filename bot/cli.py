@@ -105,8 +105,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                       file=sys.stderr)
             if str(incoming).lower() not in {"yes", "true", "1"}:
                 ok = False
-                print("  -> set incomingWebhook=yes in the console or the queue stays empty",
-                      file=sys.stderr)
+                print("  -> in the console, turn on Webhooks > 'Receive webhooks on incoming "
+                      "messages and files', or the queue stays empty", file=sys.stderr)
         except HttpError as exc:
             print(f"settings          : FAILED ({exc})", file=sys.stderr)
 
