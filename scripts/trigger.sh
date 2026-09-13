@@ -14,7 +14,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-repo="$(git remote get-url origin | sed -E 's#.*github\.com[:/]([^/]+/[^/]+?)(\.git)?$#\1#')"
+# Parameter expansion rather than sed: BSD sed has no lazy quantifiers, so an ERE that works
+# on GNU fails on macOS.
+remote_url="$(git remote get-url origin)"
+repo="${remote_url#*github.com/}" # https form
+repo="${repo#*github.com:}"       # ssh form
+repo="${repo%.git}"
+repo="${repo%/}"
 token="$(sed -n 's|https://[^:]*:\(.*\)@github.com|\1|p' .git/.git-credentials 2>/dev/null | head -1)"
 if [ -z "${token}" ]; then
   echo "No stored GitHub credential. Run: git push   (it will prompt and store one)" >&2
